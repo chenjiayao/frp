@@ -23,7 +23,7 @@ import (
 type Message = jsonMsg.Message
 
 var (
-	msgCtl *jsonMsg.MsgCtl
+	msgCtl *jsonMsg.MsgCtl // tcp 连接中，要对信息进行 pack 打包，这里是一种打包方式
 )
 
 func init() {

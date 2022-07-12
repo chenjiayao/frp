@@ -104,7 +104,7 @@ func (svr *Service) GetController() *Control {
 }
 
 func (svr *Service) Run() error {
-	xl := xlog.FromContextSafe(svr.ctx)
+	xl := xlog.FromContextSafe(svr.ctx) // xl 输出的日志中会包含 id 之类的上下文，xl 中的 prefix 会包含上下文等信息，所以这里每次需要取到对应的 xl
 
 	// set custom DNSServer
 	if svr.cfg.DNSServer != "" {
@@ -137,6 +137,8 @@ func (svr *Service) Run() error {
 			// login success
 			ctl := NewControl(svr.ctx, svr.runID, conn, session, svr.cfg, svr.pxyCfgs, svr.visitorCfgs, svr.serverUDPPort, svr.authSetter)
 			ctl.Run()
+			//这里需要对 ctlMu 加锁的原因是：keepControllerWorking 函数要保证 frpc 和 frps 的 7001 端口保持连接
+			// 如果断开连接需要重新登陆，那么就有多个 goroutine 对 ctlMu 操作，所以这里要加锁
 			svr.ctlMu.Lock()
 			svr.ctl = ctl
 			svr.ctlMu.Unlock()
@@ -229,6 +231,7 @@ func (svr *Service) keepControllerWorking() {
 // login creates a connection to frps and registers it self as a client
 // conn: control connection
 // session: if it's not nil, using tcp mux
+// frpc 登陆到 frps
 func (svr *Service) login() (conn net.Conn, session *fmux.Session, err error) {
 	xl := xlog.FromContextSafe(svr.ctx)
 	var tlsConfig *tls.Config
@@ -249,6 +252,7 @@ func (svr *Service) login() (conn net.Conn, session *fmux.Session, err error) {
 		}
 	}
 
+	//解析 http proxy 类型：{protocol}://user:passwd@192.168.1.128:8080
 	proxyType, addr, auth, err := libdial.ParseProxyURL(svr.cfg.HTTPProxy)
 	if err != nil {
 		xl.Error("fail to parse proxy url")
@@ -274,6 +278,7 @@ func (svr *Service) login() (conn net.Conn, session *fmux.Session, err error) {
 			Hook: frpNet.DialHookCustomTLSHeadByte(tlsConfig != nil, svr.cfg.DisableCustomTLSFirstByte),
 		}),
 	)
+
 	conn, err = libdial.Dial(
 		net.JoinHostPort(svr.cfg.ServerAddr, strconv.Itoa(svr.cfg.ServerPort)),
 		dialOptions...,
@@ -308,6 +313,9 @@ func (svr *Service) login() (conn net.Conn, session *fmux.Session, err error) {
 		conn = stream
 	}
 
+	// frpc 成功和 frps 的7001 端口建立 tcp 连接
+	// 下面 frpc 要发送登陆信息到 frps 进行登陆
+
 	loginMsg := &msg.Login{
 		Arch:      runtime.GOARCH,
 		Os:        runtime.GOOS,
@@ -320,6 +328,8 @@ func (svr *Service) login() (conn net.Conn, session *fmux.Session, err error) {
 	}
 
 	// Add auth
+	// 在 loginMsg 有一个属性： PrivilegeKey，会将加密之后的密码保存在这里
+	// loginMsg 是一个指针，所以可以在 SetLogin 中赋值
 	if err = svr.authSetter.SetLogin(loginMsg); err != nil {
 		return
 	}
@@ -341,9 +351,9 @@ func (svr *Service) login() (conn net.Conn, session *fmux.Session, err error) {
 		return
 	}
 
-	svr.runID = loginRespMsg.RunID
+	svr.runID = loginRespMsg.RunID // frps 会分配一个 runID 给 frpc
 	xl.ResetPrefixes()
-	xl.AppendPrefix(svr.runID)
+	xl.AppendPrefix(svr.runID) // 客户端的日志会将这个 runID 添加到前缀中
 
 	svr.serverUDPPort = loginRespMsg.ServerUDPPort
 	xl.Info("login to server success, get run id [%s], server udp port [%d]", loginRespMsg.RunID, loginRespMsg.ServerUDPPort)

@@ -112,7 +112,7 @@ func NewControl(ctx context.Context, runID string, conn net.Conn, session *fmux.
 		writerShutdown:     shutdown.New(),
 		msgHandlerShutdown: shutdown.New(),
 		serverUDPPort:      serverUDPPort,
-		xl:                 xlog.FromContextSafe(ctx),
+		xl:                 xlog.FromContextSafe(ctx), // control 的 xl 和 service 的 xl 是一样的，这里的 logger prefix 包含了 runID
 		ctx:                ctx,
 		authSetter:         authSetter,
 	}
@@ -127,6 +127,10 @@ func (ctl *Control) Run() {
 	go ctl.worker()
 
 	// start all proxies
+	//这里加载 frpc.ini 中的 proxy 相关配置，根据配置要和 frps 对应的端口建立连接
+	// 比如：配置了 tcp proxy：指定本地端口（local_port）为 22 ，远程端口（remote_port）为 6000
+	// 那么 frps 会 listen 6000 端口，frpc 会与 6000 端口建立连接
+	// 然后将 frps 6000 端口的信息 io.Copy 到 frpc 的 local_port 端口
 	ctl.pm.Reload(ctl.pxyCfgs)
 
 	// start all visitors
