@@ -59,6 +59,7 @@ type Control struct {
 	sendCh chan (msg.Message)
 
 	// read from this channel to get the next message sent by server
+
 	readCh chan (msg.Message)
 
 	// goroutines can block by reading from this channel, it will be closed only in reader() when control connection is closed
@@ -140,7 +141,7 @@ func (ctl *Control) Run() {
 
 func (ctl *Control) HandleReqWorkConn(inMsg *msg.ReqWorkConn) {
 	xl := ctl.xl
-	workConn, err := ctl.connectServer()
+	workConn, err := ctl.connectServer() //
 	if err != nil {
 		return
 	}
@@ -315,7 +316,7 @@ func (ctl *Control) writer() {
 		return
 	}
 	for {
-		m, ok := <-ctl.sendCh
+		m, ok := <-ctl.sendCh //
 		if !ok {
 			xl.Info("control writer is closing")
 			return
@@ -380,6 +381,7 @@ func (ctl *Control) msgHandler() {
 				return
 			}
 
+			//frpc 发送创建新的 proxy 请求，frps 收到之后回复，这里处理回复逻辑
 			switch m := rawMsg.(type) {
 			case *msg.ReqWorkConn:
 				go ctl.HandleReqWorkConn(m)
@@ -400,7 +402,7 @@ func (ctl *Control) msgHandler() {
 
 // If controler is notified by closedCh, reader and writer and handler will exit
 func (ctl *Control) worker() {
-	go ctl.msgHandler()
+	go ctl.msgHandler() // frps 的消息会经过  readCh 到达 msgHandler 处理
 	go ctl.reader()
 	go ctl.writer()
 

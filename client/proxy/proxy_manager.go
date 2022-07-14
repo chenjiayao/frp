@@ -14,8 +14,9 @@ import (
 	"github.com/fatedier/golib/errors"
 )
 
+// proxyManager：管理所有的 proxy
 type Manager struct {
-	sendCh  chan (msg.Message)
+	sendCh  chan (msg.Message) //proxy 启动的时候，需要发送 remote_port 等信息给 frps，这些信息写入 sendCh， control 那边会读取 sendCh，通过 conn 发送给 frps
 	proxies map[string]*Wrapper
 
 	closed bool
@@ -75,6 +76,11 @@ func (pm *Manager) HandleWorkConn(name string, workConn net.Conn, m *msg.StartWo
 	}
 }
 
+/**
+
+这个函数的作用：
+	frpc 中的 proxy 配置要发送给 frps，让frps 开始监听配置的端口
+*/
 func (pm *Manager) HandleEvent(evType event.Type, payload interface{}) error {
 	var m msg.Message
 	switch e := payload.(type) {
@@ -123,13 +129,14 @@ func (pm *Manager) Reload(pxyCfgs map[string]config.ProxyConf) {
 			delPxyNames = append(delPxyNames, name)
 			delete(pm.proxies, name)
 
-			pxy.Stop()
+			pxy.Stop() //这里停止 proxy，对应的 frps 的端口也会被关闭
 		}
 	}
 	if len(delPxyNames) > 0 {
 		xl.Info("proxy removed: %v", delPxyNames)
 	}
 
+	//到这里 pxyCfgs 为需要进行 proxy 的配置
 	addPxyNames := make([]string, 0)
 	for name, cfg := range pxyCfgs {
 		if _, ok := pm.proxies[name]; !ok {

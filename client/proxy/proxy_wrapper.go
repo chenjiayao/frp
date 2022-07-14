@@ -56,10 +56,10 @@ type Wrapper struct {
 	// event handler
 	handler event.Handler
 
-	health           uint32
+	health           uint32 // 0--正常，1--失败
 	lastSendStartMsg time.Time
 	lastStartErr     time.Time
-	closeCh          chan struct{}
+	closeCh          chan struct{} // proxy 关闭
 	healthNotifyCh   chan struct{}
 	mu               sync.RWMutex
 
@@ -69,12 +69,13 @@ type Wrapper struct {
 
 func NewWrapper(ctx context.Context, cfg config.ProxyConf, clientCfg config.ClientCommonConf, eventHandler event.Handler, serverUDPPort int) *Wrapper {
 	baseInfo := cfg.GetBaseInfo()
+	//
 	xl := xlog.FromContextSafe(ctx).Spawn().AppendPrefix(baseInfo.ProxyName)
 	pw := &Wrapper{
 		WorkingStatus: WorkingStatus{
 			Name:  baseInfo.ProxyName,
 			Type:  baseInfo.ProxyType,
-			Phase: ProxyPhaseNew,
+			Phase: ProxyPhaseNew, // proxy 的状态
 			Cfg:   cfg,
 		},
 		closeCh:        make(chan struct{}),
@@ -86,6 +87,7 @@ func NewWrapper(ctx context.Context, cfg config.ProxyConf, clientCfg config.Clie
 
 	if baseInfo.HealthCheckType != "" {
 		pw.health = 1 // means failed
+
 		pw.monitor = health.NewMonitor(pw.ctx, baseInfo.HealthCheckType, baseInfo.HealthCheckIntervalS,
 			baseInfo.HealthCheckTimeoutS, baseInfo.HealthCheckMaxFailed, baseInfo.HealthCheckAddr,
 			baseInfo.HealthCheckURL, pw.statusNormalCallback, pw.statusFailedCallback)
@@ -166,6 +168,7 @@ func (pw *Wrapper) checkWorker() {
 			if pw.Phase == ProxyPhaseNew ||
 				pw.Phase == ProxyPhaseCheckFailed ||
 				(pw.Phase == ProxyPhaseWaitStart && now.After(pw.lastSendStartMsg.Add(waitResponseTimeout))) ||
+
 				(pw.Phase == ProxyPhaseStartErr && now.After(pw.lastStartErr.Add(startErrTimeout))) {
 
 				xl.Trace("change status from [%s] to [%s]", pw.Phase, ProxyPhaseWaitStart)
@@ -198,6 +201,7 @@ func (pw *Wrapper) checkWorker() {
 	}
 }
 
+// proxy 会有一个 monitor，当 monitor 每次健康检查成功之后，会调用这个回调函数将 heath 设置为 0 ，表示 proxy 健康
 func (pw *Wrapper) statusNormalCallback() {
 	xl := pw.xl
 	atomic.StoreUint32(&pw.health, 0)

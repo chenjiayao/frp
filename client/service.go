@@ -163,7 +163,8 @@ func (svr *Service) Run() error {
 	return nil
 }
 
-func (svr *Service) keepControllerWorking() {
+func (svr *Service) 
+keepControllerWorking() {
 	xl := xlog.FromContextSafe(svr.ctx)
 	maxDelayTime := 20 * time.Second
 	delayTime := time.Second

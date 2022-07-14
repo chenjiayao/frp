@@ -89,6 +89,7 @@ func (monitor *Monitor) Stop() {
 	monitor.cancel()
 }
 
+// 对 proxy 的端口做健康检查
 func (monitor *Monitor) checkWorker() {
 	xl := xlog.FromContextSafe(monitor.ctx)
 	for {
