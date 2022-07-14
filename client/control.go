@@ -384,9 +384,9 @@ func (ctl *Control) msgHandler() {
 			//frpc 发送创建新的 proxy 请求，frps 收到之后回复，这里处理回复逻辑
 			switch m := rawMsg.(type) {
 			case *msg.ReqWorkConn:
-				go ctl.HandleReqWorkConn(m)
-			case *msg.NewProxyResp:
-				ctl.HandleNewProxyResp(m)
+				go ctl.HandleReqWorkConn(m) // 外部有服务器通过 frps 要连接到本地，这里要接受 frps 转发的请求
+			case *msg.NewProxyResp: //
+				ctl.HandleNewProxyResp(m) //服务端已经开始监听 remote_port 端口，这里要将 proxy 的 status 改成 running
 			case *msg.Pong:
 				if m.Error != "" {
 					xl.Error("Pong contains error: %s", m.Error)
